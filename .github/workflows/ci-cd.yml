@@ -347,14 +347,30 @@ jobs:
       VERSION: ${{ needs.configuracion.outputs.version }}
       IMAGE_REF: ${{ needs.release.outputs.image }}
       RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
-      RENDER_URL: ${{ vars.RENDER_URL }}
+      # La URL no es sensible: se acepta como variable (recomendado) o como secret
+      RENDER_URL: ${{ vars.RENDER_URL || secrets.RENDER_URL }}
+      # Solo para diagnosticar si el hook se guardó en la pestaña equivocada (no se usa su valor)
+      HOOK_EN_VARIABLES: ${{ vars.RENDER_DEPLOY_HOOK != '' }}
     steps:
       - name: Verificar configuración de Render
         run: |
-          if [[ -z "$RENDER_DEPLOY_HOOK" || -z "$RENDER_URL" ]]; then
-            echo "::error::Falta el secret RENDER_DEPLOY_HOOK o la variable RENDER_URL (ver README > Despliegue en Render)"
-            exit 1
+          ok=true
+          if [[ -z "$RENDER_DEPLOY_HOOK" ]]; then
+            ok=false
+            if [[ "$HOOK_EN_VARIABLES" == "true" ]]; then
+              echo "::error::RENDER_DEPLOY_HOOK está en la pestaña 'Variables'. Por ser una credencial debe ir en 'Secrets' (Settings > Secrets and variables > Actions > Secrets > New repository secret)."
+            else
+              echo "::error::No se encuentra el secret RENDER_DEPLOY_HOOK. Debe estar en Settings > Secrets and variables > Actions > pestaña 'Secrets' (no en Dependabot ni Codespaces), con ese nombre exacto."
+            fi
           fi
+          if [[ -z "$RENDER_URL" ]]; then
+            ok=false
+            echo "::error::No se encuentra RENDER_URL. Debe estar en Settings > Secrets and variables > Actions > pestaña 'Variables' (o 'Secrets'), con ese nombre exacto."
+          fi
+          [[ "$ok" == "true" ]] || exit 1
+          # Normaliza la URL: sin barra final
+          echo "RENDER_URL=${RENDER_URL%/}" >> "$GITHUB_ENV"
+          echo "Configuración de Render encontrada: $RENDER_URL"
 
       - name: Disparar el despliegue de la imagen ${{ needs.release.outputs.image }}
         run: |
