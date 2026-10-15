@@ -3,11 +3,12 @@
 API REST de gestión de tareas en **Spring Boot 4 / Java 21**, usada como vehículo para aprender y demostrar un pipeline completo de **gestión de la configuración → integración continua → pruebas continuas → quality gates → release**.
 
 ```
-1 · Configuración ─▶ 2 · Build + pruebas ─┬─▶ 3 · Quality Gate SonarQube ─┐
-   versión SemVer      unit · IT ·         │      deuda, cobertura,        ├─▶ 5 · Release (master)
-   enforcer            JaCoCo · PMD        │      complejidad              │     tag · GHCR · GitHub Release
-   commits                                 └─▶ 4 · Aceptación Karate ──────┘
-                                                  sobre la imagen Docker
+1 · Configuración ─▶ 2 · Build + pruebas ─▶ 3 · Aceptación Karate ─▶ 4 · Release (master)
+   versión SemVer      unit · IT ·            sobre la imagen Docker    tag · GHCR · GitHub Release
+   enforcer            JaCoCo · PMD
+   commits
+
+SonarQube Cloud ── Análisis Automático en cada push a master (independiente del pipeline)
 ```
 
 ## Estructura
@@ -37,10 +38,8 @@ API REST de gestión de tareas en **Spring Boot 4 / Java 21**, usada como vehíc
 | Cobertura de líneas / ramas                               | JaCoCo                   | ≥ 80 % / ≥ 70 %                  | `mvn verify` (job 2) |
 | Complejidad **ciclomática** por método                    | PMD + Sonar `java:S1541` | ≤ 10                             | `mvn verify` (job 2) |
 | Complejidad **cognitiva** por método                      | PMD + Sonar `java:S3776` | ≤ 15                             | `mvn verify` (job 2) |
-| Cobertura, duplicación y ratings de código nuevo y global | SonarQube Quality Gate   | ver `quality/quality-gate.json`  | job 3                |
-| Deuda técnica                                             | SonarQube                | rating A, ratio ≤ 5 %, ≤ 120 min | job 3                |
-| Complejidad media por método                              | `quality-report.sh`      | ≤ 4                              | job 3                |
-| Comportamiento + versión desplegada                       | Karate                   | 100 % de escenarios              | job 4                |
+| Comportamiento + versión desplegada                       | Karate                   | 100 % de escenarios              | job 3                |
+| Duplicación, ratings, deuda técnica                       | SonarQube Cloud (Análisis Automático) | Quality Gate de SonarQube Cloud | informativo, no bloquea el release |
 
 ## Uso local
 
