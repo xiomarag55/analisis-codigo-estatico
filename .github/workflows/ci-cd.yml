@@ -123,7 +123,7 @@ jobs:
 
       - name: Publicar resultados de pruebas
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         with:
           name: Resultados JUnit (unitarias + integración)
           path: target/surefire-reports/*.xml,target/failsafe-reports/*.xml
