@@ -6,7 +6,7 @@
 #   │    configuración     │   │    + pruebas continuas   │   │    SonarQube + métricas  │  │
 #   │  versión, enforcer,  │   │  unit, IT, cobertura,    │   └──────────────────────────┘  │  ┌──────────────┐
 #   │  conventional commits│   │  complejidad (PMD)       │   ┌──────────────────────────┐  ├─▶│ 5. Release   │
-#   └──────────────────────┘   └──────────────────────────┘──▶│ 4. Pruebas de aceptación │──┘  │ (solo main)  │
+#   └──────────────────────┘   └──────────────────────────┘──▶│ 4. Pruebas de aceptación │──┘  │(solo master) │
 #                                                             │    Karate vs contenedor  │     └──────────────┘
 #                                                             └──────────────────────────┘
 #  Cualquier gate que falle detiene el pipeline: nada llega a release sin pasar todo.
@@ -15,9 +15,9 @@ name: CI-CD
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [master, develop]
   workflow_dispatch:
 
 concurrency:
@@ -55,7 +55,7 @@ jobs:
         id: version
         run: |
           NEXT=$(bash scripts/release/next-version.sh)
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/master" ]]; then
             VERSION="$NEXT"; ES_RELEASE=true
           else
             # Versiones de pre-release: trazables pero nunca confundibles con un release
@@ -166,10 +166,14 @@ jobs:
     env:
       VERSION: ${{ needs.configuracion.outputs.version }}
       APP_VERSION: ${{ needs.configuracion.outputs.version }}
-      # Opcional: servidor persistente (secrets SONAR_HOST_URL y SONAR_TOKEN).
-      # Si no se configuran, el pipeline levanta un SonarQube efímero.
+      # Servidor de análisis, según los secrets configurados:
+      #   SONAR_HOST_URL + SONAR_TOKEN -> SonarQube propio (persistente)
+      #   solo SONAR_TOKEN             -> SonarQube Cloud (sonarcloud.io)
+      #   ninguno                      -> SonarQube efímero levantado en el runner
       SONAR_EXTERNAL_URL: ${{ secrets.SONAR_HOST_URL }}
       SONAR_EXTERNAL_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION || github.repository_owner }}
+      SONAR_PROJECT_KEY: ${{ github.repository_owner }}_${{ github.event.repository.name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -184,19 +188,33 @@ jobs:
           name: build
           path: target
 
-      - name: Seleccionar servidor SonarQube (persistente o efímero)
+      - name: Seleccionar servidor SonarQube (propio, Cloud o efímero)
         run: |
           if [[ -n "$SONAR_EXTERNAL_URL" ]]; then
-            echo "Usando servidor persistente"
+            echo "Usando SonarQube propio: $SONAR_EXTERNAL_URL"
+            echo "SONAR_MODO=servidor" >> "$GITHUB_ENV"
             echo "SONAR_HOST_URL=$SONAR_EXTERNAL_URL" >> "$GITHUB_ENV"
             echo "SONAR_TOKEN=$SONAR_EXTERNAL_TOKEN" >> "$GITHUB_ENV"
+          elif [[ -n "$SONAR_EXTERNAL_TOKEN" ]]; then
+            echo "Usando SonarQube Cloud (organización $SONAR_ORGANIZATION, proyecto $SONAR_PROJECT_KEY)"
+            echo "SONAR_MODO=cloud" >> "$GITHUB_ENV"
+            echo "SONAR_HOST_URL=https://sonarcloud.io" >> "$GITHUB_ENV"
+            echo "SONAR_TOKEN=$SONAR_EXTERNAL_TOKEN" >> "$GITHUB_ENV"
+            echo "SONAR_EXTRA_ARGS=-Dsonar.organization=$SONAR_ORGANIZATION" >> "$GITHUB_ENV"
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              echo "SONAR_PULL_REQUEST=${{ github.event.pull_request.number }}" >> "$GITHUB_ENV"
+            fi
           else
             echo "Levantando SonarQube efímero en el runner"
+            echo "SONAR_MODO=efimero" >> "$GITHUB_ENV"
             docker run -d --name sonarqube -p 9000:9000 -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true sonarqube:community
             echo "SONAR_HOST_URL=http://localhost:9000" >> "$GITHUB_ENV"
           fi
 
+      # En SonarQube Cloud el Quality Gate y el Quality Profile se eligen en la interfaz
+      # (Administration > Quality Gate / Quality Profiles) y su API es distinta.
       - name: Aplicar Quality Gate y Quality Profile como código
+        if: env.SONAR_MODO != 'cloud'
         run: bash scripts/sonar/setup-sonarqube.sh
 
       - name: Análisis SonarQube (espera el veredicto del Quality Gate)
@@ -204,9 +222,11 @@ jobs:
           mvn sonar:sonar -Drevision=$VERSION
           -Dsonar.host.url=$SONAR_HOST_URL
           -Dsonar.token=$SONAR_TOKEN
+          -Dsonar.projectKey=$SONAR_PROJECT_KEY
           -Dsonar.projectVersion=$VERSION
           -Dsonar.qualitygate.wait=true
           -Dsonar.qualitygate.timeout=300
+          $SONAR_EXTRA_ARGS
 
       - name: Reporte de métricas (complejidad ciclomática/cognitiva, deuda técnica, cobertura)
         if: always()
@@ -283,7 +303,7 @@ jobs:
           retention-days: 7
 
   # ===========================================================================
-  # 5. RELEASE (solo en push a main y si TODO lo anterior pasó)
+  # 5. RELEASE (solo en push a master y si TODO lo anterior pasó)
   # ===========================================================================
   release:
     name: 5 · Release

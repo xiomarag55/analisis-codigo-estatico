@@ -16,10 +16,14 @@
 set -euo pipefail
 
 HOST="${SONAR_HOST_URL:-http://localhost:9000}"
-PROJECT_KEY="${SONAR_PROJECT_KEY:-tareas-api}"
+PROJECT_KEY="${SONAR_PROJECT_KEY:-xiomarag55_analisis-codigo-estatico}"
 CONFIG="${QUALITY_CONFIG:-quality/quality-gate.json}"
 OUT_DIR="${REPORT_DIR:-reports}"
 mkdir -p "$OUT_DIR"
+
+# En un Pull Request (SonarQube Cloud) se consultan las métricas del PR, no las de la rama principal
+PR_PARAM=""
+[[ -n "${SONAR_PULL_REQUEST:-}" ]] && PR_PARAM="&pullRequest=${SONAR_PULL_REQUEST}"
 
 api() { curl -sS --fail-with-body -u "${SONAR_TOKEN}:" "$HOST/api/$1"; }
 
@@ -34,10 +38,10 @@ METRICS="ncloc,functions,classes,complexity,cognitive_complexity,coverage,line_c
 sqale_index,sqale_rating,sqale_debt_ratio,code_smells,bugs,vulnerabilities,security_hotspots,\
 reliability_rating,security_rating,duplicated_lines_density"
 
-measures=$(api "measures/component?component=${PROJECT_KEY}&metricKeys=${METRICS}" \
+measures=$(api "measures/component?component=${PROJECT_KEY}&metricKeys=${METRICS}${PR_PARAM}" \
   | jq '[.component.measures[] | {key: .metric, value: .value}] | from_entries')
-gate=$(api "qualitygates/project_status?projectKey=${PROJECT_KEY}" | jq '.projectStatus')
-top=$(api "measures/component_tree?component=${PROJECT_KEY}&qualifiers=FIL&metricKeys=complexity,cognitive_complexity&s=metric&metricSort=cognitive_complexity&asc=false&ps=5" \
+gate=$(api "qualitygates/project_status?projectKey=${PROJECT_KEY}${PR_PARAM}" | jq '.projectStatus')
+top=$(api "measures/component_tree?component=${PROJECT_KEY}${PR_PARAM}&qualifiers=FIL&metricKeys=complexity,cognitive_complexity&s=metric&metricSort=cognitive_complexity&asc=false&ps=5" \
   | jq '[.components[] | {archivo: .path, medidas: ([.measures[] | {key: .metric, value: .value}] | from_entries)}]')
 
 m() { jq -r --arg k "$1" '.[$k] // "0"' <<<"$measures"; }

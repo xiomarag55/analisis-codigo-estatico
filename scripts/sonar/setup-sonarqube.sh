@@ -13,7 +13,7 @@
 #   SONAR_HOST_URL        (def. http://localhost:9000)
 #   SONAR_TOKEN           token con permiso de administrar quality gates/profiles (opcional)
 #   SONAR_ADMIN_PASSWORD  nueva clave de admin para el servidor efímero (opcional)
-#   SONAR_PROJECT_KEY     (def. tareas-api)
+#   SONAR_PROJECT_KEY     (def. xiomarag55_analisis-codigo-estatico)
 #   QUALITY_CONFIG        (def. quality/quality-gate.json)
 #
 # Salida: si existe $GITHUB_ENV exporta SONAR_TOKEN para los pasos siguientes.
@@ -22,7 +22,7 @@
 set -euo pipefail
 
 HOST="${SONAR_HOST_URL:-http://localhost:9000}"
-PROJECT_KEY="${SONAR_PROJECT_KEY:-tareas-api}"
+PROJECT_KEY="${SONAR_PROJECT_KEY:-xiomarag55_analisis-codigo-estatico}"
 CONFIG="${QUALITY_CONFIG:-quality/quality-gate.json}"
 ADMIN_PASSWORD="${SONAR_ADMIN_PASSWORD:-Ci-Admin-$(date +%s)-Pwd!}"
 

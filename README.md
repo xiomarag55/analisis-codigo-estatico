@@ -4,7 +4,7 @@ API REST de gestión de tareas en **Spring Boot 4 / Java 21**, usada como vehíc
 
 ```
 1 · Configuración ─▶ 2 · Build + pruebas ─┬─▶ 3 · Quality Gate SonarQube ─┐
-   versión SemVer      unit · IT ·         │      deuda, cobertura,        ├─▶ 5 · Release (main)
+   versión SemVer      unit · IT ·         │      deuda, cobertura,        ├─▶ 5 · Release (master)
    enforcer            JaCoCo · PMD        │      complejidad              │     tag · GHCR · GitHub Release
    commits                                 └─▶ 4 · Aceptación Karate ──────┘
                                                   sobre la imagen Docker

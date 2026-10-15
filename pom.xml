@@ -23,7 +23,6 @@
     <description>API de gestión de tareas - proyecto de aprendizaje de CI/CD y calidad de software</description>
 
     <properties>
-        <sonar.organization>xiomarag55</sonar.organization>
         <revision>1.0.0-SNAPSHOT</revision>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -38,9 +37,11 @@
         <sonar-plugin.version>5.8.0.7211</sonar-plugin.version>
         <git-commit-id.version>9.0.2</git-commit-id.version>
 
-        <!-- ===== SonarQube ===== -->
-        <sonar.projectKey>tareas-api</sonar.projectKey>
-        <sonar.projectName>Tareas API</sonar.projectName>
+        <!-- ===== SonarQube / SonarQube Cloud =====
+             La organización de SonarQube Cloud (xiomarag55) se pasa en el pipeline con
+             -Dsonar.organization, porque un servidor SonarQube propio no la usa. -->
+        <sonar.projectKey>xiomarag55_analisis-codigo-estatico</sonar.projectKey>
+        <sonar.projectName>analisis-codigo-estatico</sonar.projectName>
         <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco-merged/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
         <sonar.junit.reportPaths>${project.build.directory}/surefire-reports,${project.build.directory}/failsafe-reports</sonar.junit.reportPaths>
         <sonar.java.pmd.reportPaths>${project.build.directory}/pmd.xml</sonar.java.pmd.reportPaths>
@@ -259,6 +260,10 @@
                     <linkXRef>false</linkXRef>
                     <format>xml</format>
                     <includeTests>false</includeTests>
+                    <!-- Código legado intencional: SonarQube lo analiza, pero no rompe el build -->
+                    <excludes>
+                        <exclude>**/legado/**</exclude>
+                    </excludes>
                 </configuration>
                 <executions>
                     <execution>
