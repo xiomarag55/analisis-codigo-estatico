@@ -35,7 +35,7 @@
         <jacoco.version>0.8.15</jacoco.version>
         <pmd-plugin.version>3.27.0</pmd-plugin.version>
         <sonar-plugin.version>5.8.0.7211</sonar-plugin.version>
-        <git-commit-id.version>9.0.2</git-commit-id.version>
+        <git-commit-id.version>10.0.1</git-commit-id.version>
 
         <!-- ===== SonarQube ===== -->
         <sonar.projectKey>tareas-api</sonar.projectKey>
