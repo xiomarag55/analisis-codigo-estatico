@@ -41,6 +41,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       es_release: ${{ steps.version.outputs.es_release }}
+      ya_liberada: ${{ steps.version.outputs.ya_liberada }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -54,20 +55,26 @@ jobs:
         id: version
         run: |
           NEXT=$(bash scripts/release/next-version.sh)
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/master" ]]; then
+          # Release: push a master, o ejecución manual (Run workflow) sobre master
+          if [[ "${{ github.ref }}" == "refs/heads/master" && "${{ github.event_name }}" =~ ^(push|workflow_dispatch)$ ]]; then
             VERSION="$NEXT"; ES_RELEASE=true
           else
             # Versiones de pre-release: trazables pero nunca confundibles con un release
             VERSION="${NEXT}-build.${{ github.run_number }}"; ES_RELEASE=false
           fi
+          # Si el commit ya se liberó (p. ej. al relanzar a mano), no se re-publica: solo se re-despliega
+          YA_LIBERADA=false
+          git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null && YA_LIBERADA=true
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "es_release=$ES_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "ya_liberada=$YA_LIBERADA" >> "$GITHUB_OUTPUT"
           {
             echo "## 🏷️ Gestión de la configuración"
             echo "| Elemento | Valor |"
             echo "|---|---|"
             echo "| Versión | \`$VERSION\` |"
             echo "| ¿Release? | $ES_RELEASE |"
+            echo "| ¿Ya liberada? | $YA_LIBERADA |"
             echo "| Último tag | \`$(git describe --tags --abbrev=0 2>/dev/null || echo 'ninguno')\` |"
             echo "| Commit | \`${GITHUB_SHA::7}\` |"
             echo "| Rama | \`${GITHUB_REF_NAME}\` |"
@@ -241,7 +248,7 @@ jobs:
         run: bash scripts/sonar/wait-sonarcloud-gate.sh
 
   # ===========================================================================
-  # 5. RELEASE (solo en push a master y si TODO lo anterior pasó)
+  # 5. RELEASE (push o ejecución manual en master, y si TODO lo anterior pasó)
   # ===========================================================================
   release:
     name: 5 · Release
@@ -252,20 +259,37 @@ jobs:
       contents: write   # crear tag y GitHub Release
       packages: write   # publicar imagen en GHCR
     outputs:
-      image: ${{ steps.publicar.outputs.image }}
+      image: ${{ steps.imagen.outputs.image }}
     env:
       VERSION: ${{ needs.configuracion.outputs.version }}
+      YA_LIBERADA: ${{ needs.configuracion.outputs.ya_liberada }}
     steps:
+      - name: Referencia de la imagen
+        id: imagen
+        run: |
+          IMAGE_REF="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$IMAGE_NAME:$VERSION"
+          echo "IMAGE_REF=$IMAGE_REF" >> "$GITHUB_ENV"
+          echo "image=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Versión ya liberada
+        if: env.YA_LIBERADA == 'true'
+        run: |
+          echo "v$VERSION ya existe: se reutiliza la imagen publicada y solo se vuelve a desplegar."
+          echo "## ♻️ v$VERSION ya estaba liberada: se re-despliega \`$IMAGE_REF\`" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: env.YA_LIBERADA != 'true'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: env.YA_LIBERADA != 'true'
         with:
           path: artefactos
 
       - name: Cargar la imagen exacta que pasó las pruebas
+        if: env.YA_LIBERADA != 'true'
         run: gunzip -c artefactos/imagen-docker/imagen.tar.gz | docker load
 
       - name: Publicar imagen en GitHub Container Registry
-        id: publicar
+        if: env.YA_LIBERADA != 'true'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           REPO="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$IMAGE_NAME"
@@ -273,10 +297,9 @@ jobs:
             docker tag $IMAGE_NAME:$VERSION $REPO:$tag
             docker push $REPO:$tag
           done
-          echo "IMAGE_REF=$REPO:$VERSION" >> "$GITHUB_ENV"
-          echo "image=$REPO:$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Crear tag y GitHub Release
+        if: env.YA_LIBERADA != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -300,6 +323,7 @@ jobs:
             karate-report-$VERSION.zip
 
       - name: Resumen del release
+        if: env.YA_LIBERADA != 'true'
         run: |
           echo "## 🚀 Release v$VERSION publicado" >> "$GITHUB_STEP_SUMMARY"
           echo "- Imagen: \`$IMAGE_REF\`" >> "$GITHUB_STEP_SUMMARY"
