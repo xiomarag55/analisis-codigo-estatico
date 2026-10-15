@@ -23,6 +23,7 @@
     <description>API de gestión de tareas - proyecto de aprendizaje de CI/CD y calidad de software</description>
 
     <properties>
+        <sonar.organization>xiomarag55</sonar.organization>
         <revision>1.0.0-SNAPSHOT</revision>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
