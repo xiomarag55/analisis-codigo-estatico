@@ -3,12 +3,12 @@
 API REST de gestión de tareas en **Spring Boot 4 / Java 21**, usada como vehículo para aprender y demostrar un pipeline completo de **gestión de la configuración → integración continua → pruebas continuas → quality gates → release**.
 
 ```
-1 · Configuración ─▶ 2 · Build + pruebas ─▶ 3 · Aceptación Karate ─▶ 4 · Release (master)
-   versión SemVer      unit · IT ·            sobre la imagen Docker    tag · GHCR · GitHub Release
-   enforcer            JaCoCo · PMD
-   commits
-
-SonarQube Cloud ── Análisis Automático en cada push a master (independiente del pipeline)
+1 · Configuración ─▶ 2 · Build + pruebas ─▶ 3 · Aceptación Karate ──┐
+   versión SemVer      unit · IT ·            sobre la imagen Docker   ├─▶ 5 · Release ─▶ 6 · Despliegue
+   enforcer            JaCoCo · PMD                                    │    tag · GHCR       Render + smoke test
+   commits                                                             │
+1 ───────────────────▶ 4 · Quality Gate SonarQube Cloud ───────────────┘
+                          espera el Análisis Automático de ese commit
 ```
 
 ## Estructura
@@ -39,7 +39,8 @@ SonarQube Cloud ── Análisis Automático en cada push a master (independient
 | Complejidad **ciclomática** por método                    | PMD + Sonar `java:S1541` | ≤ 10                             | `mvn verify` (job 2) |
 | Complejidad **cognitiva** por método                      | PMD + Sonar `java:S3776` | ≤ 15                             | `mvn verify` (job 2) |
 | Comportamiento + versión desplegada                       | Karate                   | 100 % de escenarios              | job 3                |
-| Duplicación, ratings, deuda técnica                       | SonarQube Cloud (Análisis Automático) | Quality Gate de SonarQube Cloud | informativo, no bloquea el release |
+| Fiabilidad, seguridad, mantenibilidad y duplicación del código nuevo | SonarQube Cloud (Análisis Automático) | Quality Gate *Sonar way* | job 4: **bloquea release y despliegue** |
+| Versión correcta respondiendo en producción               | Karate `@smoke`          | 100 % de escenarios              | job 6                |
 
 ## Uso local
 
@@ -71,3 +72,51 @@ Reportes: `target/site/jacoco-merged/index.html`, `acceptance-tests/target/karat
 | GET    | `/actuator/health`, `/actuator/info` | Salud, versión y commit                                 |
 
 Estados: `PENDIENTE → EN_PROGRESO → COMPLETADA`, con `CANCELADA` como estado final alternativo.
+
+## Despliegue en Render
+
+Cada push a `master` que pasa **todos** los gates publica la imagen en GHCR y la despliega en Render. Después, Karate `@smoke` verifica en la URL pública que responde la versión recién liberada.
+
+### Configuración (una sola vez)
+
+1. **Hacer pública la imagen.** Tras el primer release, en GitHub → *Packages* → `tareas-api` → *Package settings* → *Change visibility* → **Public**. Así Render puede descargarla sin credenciales.
+2. **Crear el servicio en Render** ([render.com](https://render.com), plan Free):
+   *New → Web Service → Existing image* → `ghcr.io/xiomarag55/tareas-api:latest`.
+   - *Health Check Path*: `/actuator/health`
+   - No hace falta configurar el puerto: la app escucha en la variable `PORT` que asigna Render.
+3. En Render → servicio → *Settings* → **Deploy Hook**: copia la URL.
+4. En GitHub → *Settings → Secrets and variables → Actions*:
+   - **Secret** `RENDER_DEPLOY_HOOK` = la URL del Deploy Hook
+   - **Variable** `RENDER_URL` = la URL pública del servicio (p. ej. `https://tareas-api.onrender.com`)
+5. *(Opcional)* *Settings → Environments → production → Required reviewers*: exige aprobación manual antes de desplegar.
+
+> En el plan Free, Render apaga el servicio tras 15 min sin tráfico. La primera petición tarda unos 50 s, y el pipeline espera hasta 20 min a que responda la versión nueva.
+
+## Caso de prueba: el Quality Gate bloquea el despliegue
+
+El job 4 espera el análisis que SonarQube Cloud hace de **ese commit** y, si su Quality Gate falla, el release y el despliegue no se ejecutan.
+
+Para comprobarlo, en una rama nueva introduce un bug que SonarQube detecte, por ejemplo comparar textos con `==` (regla `java:S4973`). En `ReporteLegado.java`:
+
+```java
+public boolean esUrgente(Tarea t) {
+    return t.getTitulo() == "URGENTE";   // bug: compara referencias, no contenido
+}
+```
+
+```bash
+git checkout -b demo/quality-gate-falla
+git commit -am "feat(legado): marca tareas urgentes"
+git push -u origin demo/quality-gate-falla     # abre un PR hacia master
+```
+
+Resultado esperado en el PR:
+
+| Job | Resultado |
+|---|---|
+| 2 · Build y pruebas | ✅ (el código compila y las pruebas pasan) |
+| 4 · Quality Gate SonarQube Cloud | ❌ `new_reliability_rating` = C (umbral A) |
+
+El PR queda en rojo y, si se hiciera merge, el pipeline de `master` se detendría en el job 4 sin liberar ni desplegar. Para que el gate bloquee también el botón de merge, en *Settings → Branches → Branch protection rule* para `master` marca *Require status checks to pass* y selecciona **4 · Quality Gate SonarQube Cloud**.
+
+Corrige con `"URGENTE".equals(t.getTitulo())` y el gate vuelve a pasar.

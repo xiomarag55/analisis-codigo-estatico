@@ -19,6 +19,6 @@ ENV SPRING_PROFILES_ACTIVE=prod \
 EXPOSE 8080
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=5 \
-  CMD wget -qO- http://localhost:8080/actuator/health/readiness || exit 1
+  CMD wget -qO- http://localhost:${SERVER_PORT:-${PORT:-8080}}/actuator/health/readiness || exit 1
 
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

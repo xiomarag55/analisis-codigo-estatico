@@ -19,7 +19,8 @@ spring:
     password: ${DB_PASSWORD:}
 
 server:
-  port: ${SERVER_PORT:8080}
+  # SERVER_PORT explícito > PORT (lo asigna Render y otras plataformas PaaS) > 8080
+  port: ${SERVER_PORT:${PORT:8080}}
   shutdown: graceful
 
 management:
