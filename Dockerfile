@@ -1,6 +1,6 @@
 # Imagen de ejecución. El jar ya viene construido y probado por el pipeline
 # ("build once, deploy many"): la misma imagen que pasa Karate es la que se libera.
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 
 ARG VERSION=dev
 ARG REVISION=unknown
