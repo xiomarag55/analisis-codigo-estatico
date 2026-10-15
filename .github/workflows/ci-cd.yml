@@ -1,0 +1,345 @@
+# =============================================================================
+#  PIPELINE CI/CD - tareas-api
+#
+#   ┌──────────────────────┐   ┌──────────────────────────┐   ┌──────────────────────────┐
+#   │ 1. Gestión de la     │──▶│ 2. Integración continua  │──▶│ 3. Quality Gate          │──┐
+#   │    configuración     │   │    + pruebas continuas   │   │    SonarQube + métricas  │  │
+#   │  versión, enforcer,  │   │  unit, IT, cobertura,    │   └──────────────────────────┘  │  ┌──────────────┐
+#   │  conventional commits│   │  complejidad (PMD)       │   ┌──────────────────────────┐  ├─▶│ 5. Release   │
+#   └──────────────────────┘   └──────────────────────────┘──▶│ 4. Pruebas de aceptación │──┘  │ (solo main)  │
+#                                                             │    Karate vs contenedor  │     └──────────────┘
+#                                                             └──────────────────────────┘
+#  Cualquier gate que falle detiene el pipeline: nada llega a release sin pasar todo.
+# =============================================================================
+name: CI-CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: '21'
+  MAVEN_ARGS: -B --no-transfer-progress
+  IMAGE_NAME: tareas-api
+
+jobs:
+  # ===========================================================================
+  # 1. GESTIÓN DE LA CONFIGURACIÓN
+  # ===========================================================================
+  configuracion:
+    name: 1 · Gestión de la configuración
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      es_release: ${{ steps.version.outputs.es_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # historial y tags completos para calcular la versión
+
+      - name: Validar Conventional Commits del Pull Request
+        if: github.event_name == 'pull_request'
+        run: bash scripts/release/check-commits.sh "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
+
+      - name: Calcular versión semántica
+        id: version
+        run: |
+          NEXT=$(bash scripts/release/next-version.sh)
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            VERSION="$NEXT"; ES_RELEASE=true
+          else
+            # Versiones de pre-release: trazables pero nunca confundibles con un release
+            VERSION="${NEXT}-build.${{ github.run_number }}"; ES_RELEASE=false
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "es_release=$ES_RELEASE" >> "$GITHUB_OUTPUT"
+          {
+            echo "## 🏷️ Gestión de la configuración"
+            echo "| Elemento | Valor |"
+            echo "|---|---|"
+            echo "| Versión | \`$VERSION\` |"
+            echo "| ¿Release? | $ES_RELEASE |"
+            echo "| Último tag | \`$(git describe --tags --abbrev=0 2>/dev/null || echo 'ninguno')\` |"
+            echo "| Commit | \`${GITHUB_SHA::7}\` |"
+            echo "| Rama | \`${GITHUB_REF_NAME}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Validar entorno y POM (maven-enforcer)
+        run: mvn validate -Drevision=${{ steps.version.outputs.version }}
+
+      - name: Verificar que los umbrales de complejidad PMD y SonarQube coinciden
+        run: |
+          pmd_cog=$(grep -A3 'CognitiveComplexity"' quality/pmd-ruleset.xml | grep -oE 'value="[0-9]+"' | grep -oE '[0-9]+')
+          sonar_cog=$(jq -r '.qualityProfile.rules[] | select(.key=="java:S3776") | .params' quality/quality-gate.json | grep -oE '[0-9]+')
+          echo "Cognitiva -> PMD: $pmd_cog | SonarQube: $sonar_cog"
+          [[ "$pmd_cog" == "$sonar_cog" ]] || { echo "::error::Umbrales de complejidad cognitiva desalineados"; exit 1; }
+
+  # ===========================================================================
+  # 2. INTEGRACIÓN CONTINUA + PRUEBAS CONTINUAS
+  # ===========================================================================
+  integracion-continua:
+    name: 2 · Build y pruebas continuas
+    needs: configuracion
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write   # para publicar el reporte JUnit como "check"
+    env:
+      VERSION: ${{ needs.configuracion.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Compilar
+        run: mvn compile -Drevision=$VERSION
+
+      - name: Pruebas unitarias (Surefire)
+        run: mvn test -Drevision=$VERSION
+
+      - name: Pruebas de integración + Quality Gate local (cobertura JaCoCo + complejidad PMD)
+        run: mvn verify -Drevision=$VERSION
+
+      - name: Publicar resultados de pruebas
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Resultados JUnit (unitarias + integración)
+          path: target/surefire-reports/*.xml,target/failsafe-reports/*.xml
+          reporter: java-junit
+          fail-on-empty: false
+        continue-on-error: true   # en PRs desde forks no hay permiso para crear el check
+
+      - name: Resumen de cobertura
+        if: always()
+        run: |
+          csv=target/site/jacoco-merged/jacoco.csv
+          [[ -f $csv ]] || exit 0
+          awk -F, 'NR>1 {bm+=$6; bc+=$7; lm+=$8; lc+=$9}
+            END {printf "## 🧪 Pruebas continuas\n| Cobertura | %% |\n|---|---|\n| Líneas | %.1f |\n| Ramas | %.1f |\n",
+                 100*lc/(lm+lc), (bm+bc>0 ? 100*bc/(bm+bc) : 100)}' $csv >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar artefacto y reportes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build
+          retention-days: 7
+          path: |
+            target/tareas-api.jar
+            target/classes/
+            target/test-classes/
+            target/surefire-reports/
+            target/failsafe-reports/
+            target/site/jacoco-merged/
+            target/pmd.xml
+
+  # ===========================================================================
+  # 3. QUALITY GATE: SonarQube (deuda técnica, complejidad, cobertura, duplicación...)
+  # ===========================================================================
+  calidad:
+    name: 3 · Quality Gate SonarQube
+    needs: [configuracion, integracion-continua]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ needs.configuracion.outputs.version }}
+      APP_VERSION: ${{ needs.configuracion.outputs.version }}
+      # Opcional: servidor persistente (secrets SONAR_HOST_URL y SONAR_TOKEN).
+      # Si no se configuran, el pipeline levanta un SonarQube efímero.
+      SONAR_EXTERNAL_URL: ${{ secrets.SONAR_HOST_URL }}
+      SONAR_EXTERNAL_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # SonarQube usa el blame de git para detectar "código nuevo"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      - uses: actions/download-artifact@v4
+        with:
+          name: build
+          path: target
+
+      - name: Seleccionar servidor SonarQube (persistente o efímero)
+        run: |
+          if [[ -n "$SONAR_EXTERNAL_URL" ]]; then
+            echo "Usando servidor persistente"
+            echo "SONAR_HOST_URL=$SONAR_EXTERNAL_URL" >> "$GITHUB_ENV"
+            echo "SONAR_TOKEN=$SONAR_EXTERNAL_TOKEN" >> "$GITHUB_ENV"
+          else
+            echo "Levantando SonarQube efímero en el runner"
+            docker run -d --name sonarqube -p 9000:9000 -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true sonarqube:community
+            echo "SONAR_HOST_URL=http://localhost:9000" >> "$GITHUB_ENV"
+          fi
+
+      - name: Aplicar Quality Gate y Quality Profile como código
+        run: bash scripts/sonar/setup-sonarqube.sh
+
+      - name: Análisis SonarQube (espera el veredicto del Quality Gate)
+        run: >
+          mvn sonar:sonar -Drevision=$VERSION
+          -Dsonar.host.url=$SONAR_HOST_URL
+          -Dsonar.token=$SONAR_TOKEN
+          -Dsonar.projectVersion=$VERSION
+          -Dsonar.qualitygate.wait=true
+          -Dsonar.qualitygate.timeout=300
+
+      - name: Reporte de métricas (complejidad ciclomática/cognitiva, deuda técnica, cobertura)
+        if: always()
+        run: bash scripts/sonar/quality-report.sh
+
+      - name: Guardar reporte de calidad (histórico de aprendizaje)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-report
+          path: reports/
+          retention-days: 90
+
+  # ===========================================================================
+  # 4. PRUEBAS DE ACEPTACIÓN (Karate) sobre la imagen Docker candidata a release
+  # ===========================================================================
+  aceptacion:
+    name: 4 · Pruebas de aceptación (Karate)
+    needs: [configuracion, integracion-continua]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.configuracion.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      - uses: actions/download-artifact@v4
+        with:
+          name: build
+          path: target
+
+      - name: Construir imagen candidata
+        run: |
+          docker build -t $IMAGE_NAME:$VERSION \
+            --build-arg VERSION=$VERSION --build-arg REVISION=$GITHUB_SHA .
+
+      - name: Desplegar en entorno efímero de pruebas
+        run: |
+          docker run -d --name app -p 8080:8080 -e SPRING_PROFILES_ACTIVE=ci $IMAGE_NAME:$VERSION
+          for i in $(seq 1 30); do
+            [[ "$(docker inspect -f '{{.State.Health.Status}}' app)" == "healthy" ]] && exit 0
+            sleep 3
+          done
+          docker logs app; exit 1
+
+      - name: Ejecutar Karate (smoke + regresión)
+        run: >
+          mvn -f acceptance-tests/pom.xml test
+          -Dkarate.env=ci
+          -DbaseUrl=http://localhost:8080
+          -DexpectedVersion=$VERSION
+
+      - name: Logs de la aplicación
+        if: failure()
+        run: docker logs app
+
+      - name: Publicar reporte Karate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: karate-report
+          path: acceptance-tests/target/karate-reports/
+          retention-days: 30
+
+      - name: Guardar imagen probada (se promociona tal cual en el release)
+        run: docker save $IMAGE_NAME:$VERSION | gzip > imagen.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: imagen-docker
+          path: imagen.tar.gz
+          retention-days: 7
+
+  # ===========================================================================
+  # 5. RELEASE (solo en push a main y si TODO lo anterior pasó)
+  # ===========================================================================
+  release:
+    name: 5 · Release
+    needs: [configuracion, calidad, aceptacion]
+    if: needs.configuracion.outputs.es_release == 'true'
+    runs-on: ubuntu-latest
+    environment: production   # se puede exigir aprobación manual en Settings > Environments
+    permissions:
+      contents: write   # crear tag y GitHub Release
+      packages: write   # publicar imagen en GHCR
+    env:
+      VERSION: ${{ needs.configuracion.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefactos
+
+      - name: Cargar la imagen exacta que pasó las pruebas
+        run: gunzip -c artefactos/imagen-docker/imagen.tar.gz | docker load
+
+      - name: Publicar imagen en GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          REPO="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$IMAGE_NAME"
+          for tag in $VERSION latest; do
+            docker tag $IMAGE_NAME:$VERSION $REPO:$tag
+            docker push $REPO:$tag
+          done
+          echo "IMAGE_REF=$REPO:$VERSION" >> "$GITHUB_ENV"
+
+      - name: Crear tag y GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp artefactos/build/tareas-api.jar tareas-api-$VERSION.jar
+          ( cd artefactos/karate-report && zip -qr ../../karate-report-$VERSION.zip . )
+          {
+            echo "## Imagen Docker"
+            echo '```'
+            echo "docker pull $IMAGE_REF"
+            echo '```'
+            echo
+            cat artefactos/quality-report/quality-report.md 2>/dev/null || true
+          } > notas.md
+          gh release create "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --notes-file notas.md \
+            --generate-notes \
+            tareas-api-$VERSION.jar \
+            karate-report-$VERSION.zip \
+            artefactos/quality-report/quality-report.json
+
+      - name: Resumen del release
+        run: |
+          echo "## 🚀 Release v$VERSION publicado" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Imagen: \`$IMAGE_REF\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/v$VERSION" >> "$GITHUB_STEP_SUMMARY"

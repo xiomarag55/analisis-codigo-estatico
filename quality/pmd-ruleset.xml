@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Quality gate de COMPLEJIDAD que se ejecuta en cada build (sin servidor).
+    Los umbrales coinciden con las reglas de SonarQube configuradas en
+    quality/quality-gate.json para que ambos análisis cuenten la misma historia:
+
+      Ciclomática (McCabe)  -> PMD CyclomaticComplexity  == Sonar java:S1541
+      Cognitiva   (Sonar)   -> PMD CognitiveComplexity   == Sonar java:S3776
+
+    Si cambias un umbral aquí, cámbialo también en quality/quality-gate.json.
+-->
+<ruleset name="Quality Gate de Complejidad"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>Métricas de complejidad y diseño que rompen el build.</description>
+
+    <!-- Número de caminos independientes de un método (if, for, while, case, &&, ||, ?:) -->
+    <rule ref="category/java/design.xml/CyclomaticComplexity">
+        <priority>2</priority>
+        <properties>
+            <property name="methodReportLevel" value="10"/>
+            <property name="classReportLevel" value="80"/>
+        </properties>
+    </rule>
+
+    <!-- Dificultad para que un humano entienda el método (penaliza el anidamiento) -->
+    <rule ref="category/java/design.xml/CognitiveComplexity">
+        <priority>2</priority>
+        <properties>
+            <property name="reportLevel" value="15"/>
+        </properties>
+    </rule>
+
+    <!-- Número de caminos de ejecución acíclicos (explota con if secuenciales) -->
+    <rule ref="category/java/design.xml/NPathComplexity">
+        <priority>3</priority>
+        <properties>
+            <property name="reportLevel" value="200"/>
+        </properties>
+    </rule>
+
+    <rule ref="category/java/design.xml/NcssCount">
+        <priority>3</priority>
+        <properties>
+            <property name="methodReportLevel" value="40"/>
+            <property name="classReportLevel" value="400"/>
+        </properties>
+    </rule>
+
+    <rule ref="category/java/design.xml/AvoidDeeplyNestedIfStmts">
+        <priority>3</priority>
+        <properties>
+            <property name="problemDepth" value="3"/>
+        </properties>
+    </rule>
+
+    <rule ref="category/java/bestpractices.xml/UnusedPrivateMethod"><priority>3</priority></rule>
+    <rule ref="category/java/bestpractices.xml/UnusedLocalVariable"><priority>3</priority></rule>
+    <rule ref="category/java/errorprone.xml/EmptyCatchBlock"><priority>2</priority></rule>
+</ruleset>

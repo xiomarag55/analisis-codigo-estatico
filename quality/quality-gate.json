@@ -1,0 +1,33 @@
+{
+  "_comentario": "QUALITY GATE COMO CÓDIGO. scripts/sonar/setup-sonarqube.sh lee este archivo y lo aplica en SonarQube vía Web API. Es la única fuente de verdad: los cambios pasan por Pull Request y quedan versionados.",
+  "qualityGate": {
+    "name": "Tareas-API-Gate",
+    "conditions": [
+      { "metric": "new_coverage",                   "op": "LT", "error": "80",  "aprendizaje": "Cobertura del código nuevo >= 80%" },
+      { "metric": "new_duplicated_lines_density",   "op": "GT", "error": "3",   "aprendizaje": "Duplicación del código nuevo <= 3%" },
+      { "metric": "new_reliability_rating",         "op": "GT", "error": "1",   "aprendizaje": "Fiabilidad (bugs) del código nuevo = A" },
+      { "metric": "new_security_rating",            "op": "GT", "error": "1",   "aprendizaje": "Seguridad (vulnerabilidades) del código nuevo = A" },
+      { "metric": "new_maintainability_rating",     "op": "GT", "error": "1",   "aprendizaje": "Mantenibilidad (deuda técnica) del código nuevo = A" },
+      { "metric": "new_security_hotspots_reviewed", "op": "LT", "error": "100", "aprendizaje": "100% de security hotspots revisados" },
+      { "metric": "coverage",                       "op": "LT", "error": "80",  "aprendizaje": "Cobertura global >= 80%" },
+      { "metric": "sqale_rating",                   "op": "GT", "error": "1",   "aprendizaje": "Rating de mantenibilidad global = A" },
+      { "metric": "sqale_debt_ratio",               "op": "GT", "error": "5",   "aprendizaje": "Ratio de deuda técnica global <= 5%" }
+    ]
+  },
+  "qualityProfile": {
+    "_comentario": "Perfil Java que hereda de 'Sonar way' y endurece las reglas de complejidad. Mismos umbrales que quality/pmd-ruleset.xml.",
+    "name": "Tareas-API-Java",
+    "parent": "Sonar way",
+    "rules": [
+      { "key": "java:S3776", "params": "Threshold=15", "aprendizaje": "Complejidad COGNITIVA máxima por método" },
+      { "key": "java:S1541", "params": "Threshold=10", "aprendizaje": "Complejidad CICLOMÁTICA máxima por método" },
+      { "key": "java:S138",  "params": "max=40",       "aprendizaje": "Líneas máximas por método" }
+    ]
+  },
+  "reportThresholds": {
+    "_comentario": "Límites que scripts/sonar/quality-report.sh evalúa sobre las métricas agregadas del proyecto (SonarQube no permite usar complejidad como condición del gate).",
+    "complexity_per_function_max": 4.0,
+    "cognitive_complexity_per_function_max": 4.0,
+    "sqale_index_minutes_max": 120
+  }
+}

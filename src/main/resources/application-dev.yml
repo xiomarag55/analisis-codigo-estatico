@@ -1,0 +1,11 @@
+# Perfil de desarrollo local: consola H2 y SQL visible para aprender qué hace JPA.
+spring:
+  h2:
+    console:
+      enabled: true
+  jpa:
+    show-sql: true
+
+logging:
+  level:
+    com.calidad.tareas: DEBUG

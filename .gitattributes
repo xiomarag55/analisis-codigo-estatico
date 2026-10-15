@@ -1,0 +1,7 @@
+# Los scripts se ejecutan en Linux (runners de CI y contenedores): siempre LF,
+# aunque se editen en Windows. Sin esto falla con "bad interpreter: /bin/bash^M".
+* text=auto
+*.sh text eol=lf
+*.yml text eol=lf
+Dockerfile text eol=lf
+*.cmd text eol=crlf

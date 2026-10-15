@@ -1,0 +1,4 @@
+# Perfil del entorno efímero del pipeline donde corren las pruebas de aceptación (Karate).
+logging:
+  level:
+    root: INFO

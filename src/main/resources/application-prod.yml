@@ -1,0 +1,11 @@
+# Perfil de producción: la base de datos llega por variables de entorno (DB_URL, DB_USER, DB_PASSWORD).
+# Siguiente paso de madurez: migraciones versionadas con Flyway y ddl-auto: validate.
+management:
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: WARN
+    com.calidad.tareas: INFO
