@@ -79,7 +79,6 @@ fi
 
 # --- 3b. Quality Profile (reglas de complejidad ciclomática y cognitiva) -----
 QP_NAME=$(jq -r '.qualityProfile.name' "$CONFIG")
-QP_PARENT=$(jq -r '.qualityProfile.parent' "$CONFIG")
 
 qp_key() {
   api_get "qualityprofiles/search?language=java" \
@@ -88,8 +87,18 @@ qp_key() {
 
 QP_KEY=$(qp_key "$QP_NAME")
 if [[ -z "$QP_KEY" ]]; then
-  log "Creando Quality Profile '${QP_NAME}' a partir de '${QP_PARENT}'"
-  PARENT_KEY=$(qp_key "$QP_PARENT")
+  # Los nombres de los perfiles base cambian entre versiones: se usa el primero que exista
+  PARENT_KEY=""
+  while read -r parent; do
+    PARENT_KEY=$(qp_key "$parent")
+    [[ -n "$PARENT_KEY" ]] && break
+  done < <(jq -r '.qualityProfile.parents[]' "$CONFIG")
+  if [[ -z "$PARENT_KEY" ]]; then
+    echo "Ninguno de los perfiles base existe: $(jq -c '.qualityProfile.parents' "$CONFIG")"
+    echo "Disponibles: $(api_get 'qualityprofiles/search?language=java' | jq -c '[.profiles[].name]')"
+    exit 1
+  fi
+  log "Creando Quality Profile '${QP_NAME}' a partir de '${parent}'"
   QP_KEY=$(api_post qualityprofiles/copy --data-urlencode "fromKey=${PARENT_KEY}" --data-urlencode "toName=${QP_NAME}" | jq -r '.key')
 fi
 

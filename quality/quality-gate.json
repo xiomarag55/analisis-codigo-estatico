@@ -15,9 +15,9 @@
     ]
   },
   "qualityProfile": {
-    "_comentario": "Perfil Java que hereda de 'Sonar way' y endurece las reglas de complejidad. Mismos umbrales que quality/pmd-ruleset.xml.",
+    "_comentario": "Perfil Java que copia el primer perfil base disponible y endurece las reglas de complejidad. Mismos umbrales que quality/pmd-ruleset.xml. Desde SonarQube 26.x 'Sonar way' se dividió en core / extended / comprehensive: 'core' no incluye las reglas de mantenibilidad.",
     "name": "Tareas-API-Java",
-    "parent": "Sonar way",
+    "parents": ["Sonar way comprehensive", "Sonar way"],
     "rules": [
       { "key": "java:S3776", "params": "Threshold=15", "aprendizaje": "Complejidad COGNITIVA máxima por método" },
       { "key": "java:S1541", "params": "Threshold=10", "aprendizaje": "Complejidad CICLOMÁTICA máxima por método" },
