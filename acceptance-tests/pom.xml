@@ -22,7 +22,7 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <karate.version>1.5.1</karate.version>
+        <karate.version>1.5.2</karate.version>
         <surefire.version>3.5.4</surefire.version>
         <karate.env>local</karate.env>
         <baseUrl/>
