@@ -32,15 +32,15 @@ API REST de gestión de tareas en **Spring Boot 4 / Java 21**, usada como vehíc
 
 ## Quality gates
 
-| Gate | Herramienta | Umbral | Dónde falla |
-|---|---|---|---|
-| Cobertura de líneas / ramas | JaCoCo | ≥ 80 % / ≥ 70 % | `mvn verify` (job 2) |
-| Complejidad **ciclomática** por método | PMD + Sonar `java:S1541` | ≤ 10 | `mvn verify` (job 2) |
-| Complejidad **cognitiva** por método | PMD + Sonar `java:S3776` | ≤ 15 | `mvn verify` (job 2) |
-| Cobertura, duplicación y ratings de código nuevo y global | SonarQube Quality Gate | ver `quality/quality-gate.json` | job 3 |
-| Deuda técnica | SonarQube | rating A, ratio ≤ 5 %, ≤ 120 min | job 3 |
-| Complejidad media por método | `quality-report.sh` | ≤ 4 | job 3 |
-| Comportamiento + versión desplegada | Karate | 100 % de escenarios | job 4 |
+| Gate                                                      | Herramienta              | Umbral                           | Dónde falla          |
+| --------------------------------------------------------- | ------------------------ | -------------------------------- | -------------------- |
+| Cobertura de líneas / ramas                               | JaCoCo                   | ≥ 80 % / ≥ 70 %                  | `mvn verify` (job 2) |
+| Complejidad **ciclomática** por método                    | PMD + Sonar `java:S1541` | ≤ 10                             | `mvn verify` (job 2) |
+| Complejidad **cognitiva** por método                      | PMD + Sonar `java:S3776` | ≤ 15                             | `mvn verify` (job 2) |
+| Cobertura, duplicación y ratings de código nuevo y global | SonarQube Quality Gate   | ver `quality/quality-gate.json`  | job 3                |
+| Deuda técnica                                             | SonarQube                | rating A, ratio ≤ 5 %, ≤ 120 min | job 3                |
+| Complejidad media por método                              | `quality-report.sh`      | ≤ 4                              | job 3                |
+| Comportamiento + versión desplegada                       | Karate                   | 100 % de escenarios              | job 4                |
 
 ## Uso local
 
@@ -61,27 +61,14 @@ Reportes: `target/site/jacoco-merged/index.html`, `acceptance-tests/target/karat
 
 ## API
 
-| Método | Ruta | Descripción |
-|---|---|---|
-| GET | `/api/v1/tareas?estado=` | Listar (filtro opcional) |
-| GET | `/api/v1/tareas/{id}` | Obtener |
-| POST | `/api/v1/tareas` | Crear `{titulo, descripcion?, prioridad, fechaLimite?}` |
-| PUT | `/api/v1/tareas/{id}` | Actualizar |
-| PATCH | `/api/v1/tareas/{id}/estado` | Cambiar estado `{estado}` |
-| DELETE | `/api/v1/tareas/{id}` | Eliminar |
-| GET | `/actuator/health`, `/actuator/info` | Salud, versión y commit |
+| Método | Ruta                                 | Descripción                                             |
+| ------ | ------------------------------------ | ------------------------------------------------------- |
+| GET    | `/api/v1/tareas?estado=`             | Listar (filtro opcional)                                |
+| GET    | `/api/v1/tareas/{id}`                | Obtener                                                 |
+| POST   | `/api/v1/tareas`                     | Crear `{titulo, descripcion?, prioridad, fechaLimite?}` |
+| PUT    | `/api/v1/tareas/{id}`                | Actualizar                                              |
+| PATCH  | `/api/v1/tareas/{id}/estado`         | Cambiar estado `{estado}`                               |
+| DELETE | `/api/v1/tareas/{id}`                | Eliminar                                                |
+| GET    | `/actuator/health`, `/actuator/info` | Salud, versión y commit                                 |
 
 Estados: `PENDIENTE → EN_PROGRESO → COMPLETADA`, con `CANCELADA` como estado final alternativo.
-
-## Puesta en marcha en GitHub
-
-1. Sube el repositorio a GitHub con rama `main`.
-2. *(Opcional)* SonarQube persistente: crea los secrets `SONAR_HOST_URL` y `SONAR_TOKEN`. Sin ellos el pipeline levanta un SonarQube efímero en cada ejecución.
-3. *(Opcional)* Aprobación manual del release: *Settings → Environments → production → Required reviewers*.
-4. Usa [Conventional Commits](https://www.conventionalcommits.org/es/) (`feat:`, `fix:`, `refactor:`...): de ellos sale la versión.
-
-Cada push a `main` que pase todos los gates publica `vX.Y.Z` en *Releases* y la imagen en `ghcr.io/<owner>/tareas-api`.
-
-## Aprendizaje
-
-Empieza por [docs/aprendizaje/README.md](docs/aprendizaje/README.md) y registra tus experimentos en la [bitácora](docs/aprendizaje/bitacora.md).
