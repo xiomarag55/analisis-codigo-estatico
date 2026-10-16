@@ -36,6 +36,7 @@
         <pmd-plugin.version>3.27.0</pmd-plugin.version>
         <sonar-plugin.version>5.8.0.7211</sonar-plugin.version>
         <git-commit-id.version>9.0.2</git-commit-id.version>
+        <springdoc.version>3.0.3</springdoc.version>
 
         <!-- ===== SonarQube / SonarQube Cloud =====
              La organización de SonarQube Cloud (xiomarag55) se pasa en el pipeline con
@@ -68,6 +69,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- Documentación OpenAPI + Swagger UI en /swagger-ui.html -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
         </dependency>
         <dependency>
             <groupId>com.h2database</groupId>
