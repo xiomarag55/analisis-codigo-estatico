@@ -132,7 +132,7 @@ jobs:
         uses: dorny/test-reporter@31a54ee7ebcacc03a09ea97a7e5465a47b84aea5 # v1.9.1
         with:
           name: Resultados JUnit (unitarias + integración)
-          path: target/surefire-reports/*.xml,target/failsafe-reports/*.xml
+          path: target/surefire-reports/TEST-*.xml,target/failsafe-reports/TEST-*.xml
           reporter: java-junit
           fail-on-empty: false
         continue-on-error: true   # en PRs desde forks no hay permiso para crear el check
