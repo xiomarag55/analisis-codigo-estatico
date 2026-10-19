@@ -54,7 +54,7 @@ class ReporteLegadoTest {
 
     @Test
     void cuentaPorPrioridad() {
-        assertThat(reporte.contarPorPrioridad(tareas(), Prioridad.BAJA, false)).isEqualTo(3);
+        assertThat(reporte.contarPorPrioridad(tareas(), Prioridad.BAJA)).isEqualTo(3);
     }
 
     @Test
