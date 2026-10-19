@@ -6,7 +6,7 @@
 services:
   sonarqube:
     image: sonarqube:26.10.0.133078-community
-    container_name: sonarqube
+    container_name: sonarqube-calidad
     ports:
       - "9000:9000"
     environment:

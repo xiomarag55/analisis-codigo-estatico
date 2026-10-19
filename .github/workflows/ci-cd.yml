@@ -9,6 +9,7 @@
 #
 #  Cualquier gate que falle detiene el pipeline: nada se libera ni se despliega sin pasar todo.
 #  5 y 6 solo corren en push a master.
+#  Runners fijados en ubuntu-24.04 (no ubuntu-latest) para que el entorno no cambie solo.
 # =============================================================================
 name: CI-CD
 
@@ -37,7 +38,7 @@ jobs:
   # ===========================================================================
   configuracion:
     name: 1 · Gestión de la configuración
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
       es_release: ${{ steps.version.outputs.es_release }}
@@ -102,7 +103,7 @@ jobs:
   integracion-continua:
     name: 2 · Build y pruebas continuas
     needs: configuracion
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       checks: write   # para publicar el reporte JUnit como "check"
@@ -167,7 +168,7 @@ jobs:
   aceptacion:
     name: 3 · Pruebas de aceptación (Karate)
     needs: [configuracion, integracion-continua]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       VERSION: ${{ needs.configuracion.outputs.version }}
     steps:
@@ -233,7 +234,7 @@ jobs:
     name: 4 · Quality Gate SonarQube Cloud
     needs: configuracion
     if: github.ref == 'refs/heads/master' || github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -254,7 +255,7 @@ jobs:
     name: 5 · Release
     needs: [configuracion, aceptacion, quality-gate]
     if: needs.configuracion.outputs.es_release == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write   # crear tag y GitHub Release
       packages: write   # publicar imagen en GHCR
@@ -338,7 +339,7 @@ jobs:
   despliegue:
     name: 6 · Despliegue en Render
     needs: [configuracion, release]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment:
       name: production   # en Settings > Environments se puede exigir aprobación manual

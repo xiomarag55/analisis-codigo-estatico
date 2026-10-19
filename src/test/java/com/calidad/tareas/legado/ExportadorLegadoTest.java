@@ -1,6 +1,7 @@
 package com.calidad.tareas.legado;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import com.calidad.tareas.dominio.EstadoTarea;
 import com.calidad.tareas.dominio.Prioridad;
@@ -11,8 +12,8 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Red de seguridad del código legado: fija el comportamiento actual (incluido el bug de
- * la división entera) para poder refactorizar sin cambiar resultados sin querer.
+ * Red de seguridad del código legado: fijó el comportamiento antes de refactorizar, así
+ * el refactor no cambió resultados sin querer (salvo el bug de la división entera, corregido).
  */
 class ExportadorLegadoTest {
 
@@ -50,15 +51,21 @@ class ExportadorLegadoTest {
     }
 
     @Test
-    void porcentajeDeCompletadasTruncaPorLaDivisionEntera() {
-        // 1 de 3 = 33.33...%, pero la división entera devuelve 33.0 (el bug que reporta SonarQube)
-        assertThat(exportador.porcentajeCompletadas(tareas())).isEqualTo(33.0);
+    void porcentajeDeCompletadasConservaLosDecimales() {
+        // 1 de 3 = 33.33...%; antes la división entera devolvía 33.0 (bug java:S2184)
+        assertThat(exportador.porcentajeCompletadas(tareas())).isCloseTo(33.33, within(0.01));
         assertThat(exportador.porcentajeCompletadas(List.of())).isZero();
     }
 
     @Test
     void construyeElDestinoFtp() {
         assertThat(exportador.destinoFtp()).startsWith("ftp://exportador:").endsWith("/exportaciones");
+    }
+
+    @Test
+    void laContrasenaFtpNoVieneDelCodigo() {
+        assertThat(new ExportadorLegado("desde-entorno").destinoFtp())
+                .isEqualTo("ftp://exportador:desde-entorno@ftp.ejemplo.local/exportaciones");
     }
 
     @Test
@@ -77,5 +84,6 @@ class ExportadorLegadoTest {
     void parseaPrioridadConValorPorDefecto() {
         assertThat(exportador.parsearPrioridad(" alta ")).isEqualTo(Prioridad.ALTA);
         assertThat(exportador.parsearPrioridad("desconocida")).isEqualTo(Prioridad.MEDIA);
+        assertThat(exportador.parsearPrioridad(null)).isEqualTo(Prioridad.MEDIA);
     }
 }
